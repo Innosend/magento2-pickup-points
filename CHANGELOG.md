@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- Allowed Carriers config field: a failed carrier lookup is cached for 15 minutes, so admin config pages no longer call the Innosend API (and wait for its timeout) on every load.
+- Checkout: the "No pickup points found" message no longer shows the API URL. The URL is only returned in developer mode, and then logged to the browser console.
+
 ## [1.1.1] – 2026-03-05
 
 ### Changed

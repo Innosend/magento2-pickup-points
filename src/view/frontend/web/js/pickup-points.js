@@ -970,10 +970,13 @@ define([
                     } else {
                         this.pickupPoints([]);
                         if (isSelectedNow) {
-                            // Show error message with API URL
                             const errorMsg = response.message || "No pickup points found for this address.";
-                            const apiUrl = response.api_url || this.apiRequestUrl() || "Unknown";
-                            this.errorMessage(errorMsg + " (API URL: " + apiUrl + ")");
+                            this.errorMessage(errorMsg);
+
+                            // The backend only sends api_url in developer mode
+                            if (response.api_url) {
+                                console.debug("Innosend pickup points API URL:", response.api_url);
+                            }
 
                             // Clear selection when visible
                             this.selectedPickupPoint(null);
@@ -1006,9 +1009,7 @@ define([
 
                     this.pickupPoints([]);
                     if (this.isPickupPointsShippingMethodSelected()) {
-                        // Show error message with API URL
-                        const apiUrl = this.apiRequestUrl() || "Unknown";
-                        this.errorMessage(errorMsg + " (API URL: " + apiUrl + ")");
+                        this.errorMessage(errorMsg);
 
                         // Clear selection when visible
                         this.selectedPickupPoint(null);
