@@ -11,6 +11,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 ### Fixed
 
 - Allowed Carriers config field: a failed carrier lookup is cached for 15 minutes, so admin config pages no longer call the Innosend API (and wait for its timeout) on every load.
+- Saving the Innosend API settings clears the cached carriers, so a newly entered API token is used right away.
+- Checkout: changing the shipping address no longer reuses the coordinates and selected pickup point of the previous address (distances were calculated from the old address).
 - Checkout: the "No pickup points found" message no longer shows the API URL. The URL is only returned in developer mode, and then logged to the browser console.
 
 ## [1.1.1] – 2026-03-05

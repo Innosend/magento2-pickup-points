@@ -86,6 +86,7 @@ define([
             this.originalAddress = null; // Store original address for reset
             // Geocoded shipping address for address-driven API lookups
             this.originalShippingCoordinates = null;
+            this.originalShippingAddressKey = null;
             /** @type {{latitude: number, longitude: number}|null} Latest geocoded shipping coordinates; used as map fallback center for empty responses. */
             this.fallbackMapCoordinates = null;
             /** @type {{latitude: number, longitude: number}|null} Current map center; list distance / search_* uses this after pan. */
@@ -792,6 +793,23 @@ define([
                 requestData.couriers = carriers.map(function (carrier) {
                     return String(carrier).toUpperCase().trim();
                 });
+            }
+
+            // A different shipping address must not reuse the coordinates of the previous one,
+            // otherwise distances are calculated from the old address.
+            const addressKey = [streetValue, requestData.postcode, requestData.city, requestData.country_code]
+                .join("|")
+                .toLowerCase();
+            if (this.originalShippingAddressKey !== addressKey) {
+                // A point chosen for the previous address is not valid for the new one;
+                // the nearest point for the new address is selected when the results arrive.
+                if (this.originalShippingAddressKey !== null) {
+                    this.selectedPickupPoint(null);
+                    this.selectedPickupPointDisplay(null);
+                    this.storePickupPointGlobally(null);
+                }
+                this.originalShippingCoordinates = null;
+                this.originalShippingAddressKey = addressKey;
             }
 
             // Store coordinates for distance calculation.
