@@ -101,6 +101,8 @@ define([
             this.lastUserSelection = null; // Store timestamp of last user selection to prevent auto-reset
             this.pickupPointsLoadDebounceTimer = null; // Debounce timer for address-based loading
             this.lastPickupPointsLookupKey = null; // Prevent repeated loading for same address key
+            this.queuedAddressLoad = null; // Address lookup waiting for the running request
+            this.prefetchReturnedNoPoints = false; // Last prefetch (method not selected) found no points
             this.skipNextMapMove = false; // When true, onMapMove returns early (used after list toggle)
             this.activeBoundsRequest = null; // Active jqXHR for map bounds updates
             this.pendingBoundsRefresh = null; // Queue latest bounds refresh while a request is in flight
@@ -613,9 +615,12 @@ define([
         /**
          * Ensure a pickup point is selected (nearest) when our method is selected.
          * Useful when pickup points were prefetched before selection.
+         *
+         * @param {boolean} [methodSelected] true when the caller already knows our method is selected;
+         *     inside a quote.shippingMethod subscriber the computed can still return the old value.
          */
-        ensureNearestPickupPointSelectedForCurrentAddress: function () {
-            if (!this.isPickupPointsShippingMethodSelected()) {
+        ensureNearestPickupPointSelectedForCurrentAddress: function (methodSelected) {
+            if (!methodSelected && !this.isPickupPointsShippingMethodSelected()) {
                 return;
             }
 
@@ -641,13 +646,30 @@ define([
                 return;
             }
 
+            // The success handler selects the nearest point when a running request completes.
+            if (this.isLoading()) {
+                return;
+            }
+
             const points = this.pickupPoints() || [];
             if (!Array.isArray(points) || points.length === 0) {
+                // A prefetch without results shows nothing while the method is not selected;
+                // load once more so the customer sees the result (or the "no pickup points" message).
+                if (this.prefetchReturnedNoPoints) {
+                    this.prefetchReturnedNoPoints = false;
+                    this.lastPickupPointsLookupKey = null;
+                    this.maybeLoadPickupPointsForAddress(address, 0);
+                }
                 return;
             }
 
             // Backend returns nearest first; we keep them sorted client-side too
             const nearestPoint = points[0];
+            if (!nearestPoint.address && nearestPoint.street) {
+                nearestPoint.address = [nearestPoint.street, nearestPoint.postcode, nearestPoint.city]
+                    .filter(Boolean)
+                    .join(", ");
+            }
             this.selectedPickupPoint(nearestPoint);
             this.selectedPickupPointDisplay(this.formatPickupPointForDisplay(nearestPoint));
             this.savePickupPoint(nearestPoint);
@@ -698,7 +720,7 @@ define([
                 this.maybeLoadPickupPointsForAddress(address, 0);
 
                 // If pickup points were prefetched earlier, select nearest now (and save)
-                this.ensureNearestPickupPointSelectedForCurrentAddress();
+                this.ensureNearestPickupPointSelectedForCurrentAddress(true);
             } else {
                 this.selectedPickupPointDisplay(null);
             }
@@ -770,6 +792,13 @@ define([
             this.boundsRequestSeq++;
 
             if (this.isLoading()) {
+                // The lookup key is already marked as loaded, so run this request once the current one
+                // finishes instead of dropping it (otherwise the latest address never gets pickup points).
+                const queued = this.queuedAddressLoad;
+                this.queuedAddressLoad = {
+                    address: address,
+                    options: {prefetchOnly: prefetchOnly && (!queued || queued.options.prefetchOnly)},
+                };
                 return;
             }
 
@@ -860,7 +889,13 @@ define([
                 dataType: "json",
                 traditional: true, // Use traditional array serialization (couriers=value1&couriers=value2)
                 success: function (response) {
+                    // A newer address lookup is waiting; this response belongs to an older address.
+                    if (this.queuedAddressLoad) {
+                        return;
+                    }
+
                     const isSelectedNow = this.isPickupPointsShippingMethodSelected();
+                    this.prefetchReturnedNoPoints = false;
 
                     // Clear any previous errors (only when visible)
                     if (isSelectedNow) {
@@ -987,6 +1022,7 @@ define([
                         }
                     } else {
                         this.pickupPoints([]);
+                        this.prefetchReturnedNoPoints = !isSelectedNow;
                         if (isSelectedNow) {
                             const errorMsg = response.message || "No pickup points found for this address.";
                             this.errorMessage(errorMsg);
@@ -1014,6 +1050,10 @@ define([
                     }
                 }.bind(this),
                 error: function (xhr, status, error) {
+                    if (this.queuedAddressLoad) {
+                        return;
+                    }
+
                     // Try to parse error response
                     let errorMsg = this.getConfiguredText(this.loadingFailedText, this.defaultLoadingFailedText);
                     try {
@@ -1046,6 +1086,12 @@ define([
                 }.bind(this),
                 complete: function () {
                     this.isLoading(false);
+
+                    const queued = this.queuedAddressLoad;
+                    if (queued) {
+                        this.queuedAddressLoad = null;
+                        this.loadPickupPoints(queued.address, queued.options);
+                    }
                 }.bind(this),
             });
         },
