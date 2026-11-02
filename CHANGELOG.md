@@ -6,7 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ---
 
-## [Unreleased]
+## [1.3.0] - 2026-11-02
+
+### Changed
+
+- Requires `innosend/magento2-integration` 1.3.0 or newer: the carrier lookup without the 301 lives there.
+- The package version comes from the git tag; the `version` field is removed from `composer.json`.
 
 ### Fixed
 
