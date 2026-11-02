@@ -14,7 +14,6 @@ use Innosend\PickupPoints\Helper\DistanceCalculator;
 use Innosend\PickupPoints\Helper\DayConverter;
 use Innosend\PickupPoints\Model\PickupPointRepository;
 use Magento\Framework\App\Action\HttpPostActionInterface;
-use Magento\Framework\App\ObjectManager;
 use Magento\Framework\App\State;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\RequestInterface;
@@ -83,7 +82,7 @@ class GetPickupPoints implements HttpPostActionInterface
      * @param DistanceCalculator $distanceCalculator
      * @param ScopeConfigInterface $scopeConfig
      * @param DayConverter $dayConverter
-     * @param State|null $appState
+     * @param State $appState
      */
     public function __construct(
         JsonFactory $resultJsonFactory,
@@ -94,7 +93,7 @@ class GetPickupPoints implements HttpPostActionInterface
         DistanceCalculator $distanceCalculator,
         ScopeConfigInterface $scopeConfig,
         DayConverter $dayConverter,
-        ?State $appState = null
+        State $appState
     ) {
         $this->resultJsonFactory = $resultJsonFactory;
         $this->pickupPointRepository = $pickupPointRepository;
@@ -104,7 +103,7 @@ class GetPickupPoints implements HttpPostActionInterface
         $this->distanceCalculator = $distanceCalculator;
         $this->scopeConfig = $scopeConfig;
         $this->dayConverter = $dayConverter;
-        $this->appState = $appState ?? ObjectManager::getInstance()->get(State::class);
+        $this->appState = $appState;
     }
 
     /**
