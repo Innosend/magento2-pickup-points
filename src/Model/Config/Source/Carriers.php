@@ -36,6 +36,16 @@ class Carriers implements OptionSourceInterface
     private const CACHE_LIFETIME = 86400;
 
     /**
+     * Cache key that marks a failed carriers lookup
+     */
+    private const FAILED_CACHE_KEY = 'innosend_carriers_failed';
+
+    /**
+     * Wait time before retrying a failed carriers lookup (15 minutes)
+     */
+    private const FAILED_CACHE_LIFETIME = 900;
+
+    /**
      * @var CarrierInterface
      */
     private $carrierApi;
@@ -54,6 +64,13 @@ class Carriers implements OptionSourceInterface
      * @var LoggerInterface
      */
     private $logger;
+
+    /**
+     * Carriers loaded during this request
+     *
+     * @var array|null
+     */
+    private $carriers = null;
 
     /**
      * @param CarrierInterface $carrierApi
@@ -155,6 +172,10 @@ class Carriers implements OptionSourceInterface
      */
     private function getCarriers(): array
     {
+        if ($this->carriers !== null) {
+            return $this->carriers;
+        }
+
         // Try to get from cache first
         $cached = $this->cache->load(self::CACHE_KEY);
         if ($cached) {
@@ -162,12 +183,19 @@ class Carriers implements OptionSourceInterface
                 $carriers = $this->json->unserialize($cached);
                 if (is_array($carriers) && !empty($carriers)) {
                     $this->logger->debug('Loaded ' . count($carriers) . ' carriers from cache');
+                    $this->carriers = $carriers;
                     return $carriers;
                 }
             } catch (\Exception $e) {
                 // Cache is corrupted, continue to fetch from API
                 $this->logger->warning('Failed to unserialize cached carriers: ' . $e->getMessage());
             }
+        }
+
+        // A recent lookup failed: don't hit the API again on every config page load
+        if ($this->cache->load(self::FAILED_CACHE_KEY)) {
+            $this->carriers = [];
+            return [];
         }
 
         // Fetch from API
@@ -190,13 +218,36 @@ class Carriers implements OptionSourceInterface
                 }
             } else {
                 $this->logger->warning('No carriers returned from API');
+                $this->saveFailedLookup();
             }
         } catch (LocalizedException $e) {
             $this->logger->error('Failed to fetch carriers from API: ' . $e->getMessage());
+            $this->saveFailedLookup();
+            $this->carriers = [];
             throw $e;
         }
 
+        $this->carriers = $carriers;
         return $carriers;
+    }
+
+    /**
+     * Remember a failed lookup so the API is retried only after FAILED_CACHE_LIFETIME
+     *
+     * @return void
+     */
+    private function saveFailedLookup(): void
+    {
+        try {
+            $this->cache->save(
+                '1',
+                self::FAILED_CACHE_KEY,
+                [CacheTypeConfig::TYPE_IDENTIFIER],
+                self::FAILED_CACHE_LIFETIME
+            );
+        } catch (\Exception $e) {
+            $this->logger->warning('Failed to cache failed carriers lookup: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -207,5 +258,7 @@ class Carriers implements OptionSourceInterface
     public function clearCache(): void
     {
         $this->cache->remove(self::CACHE_KEY);
+        $this->cache->remove(self::FAILED_CACHE_KEY);
+        $this->carriers = null;
     }
 }

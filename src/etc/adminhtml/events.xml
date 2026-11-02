@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright (c) Falcon Media (info@falconmedia.nl)
+ *
+ * @author Falcon Media
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="admin_system_config_changed_section_innosend_api">
+        <observer name="innosend_pickup_points_clear_carriers_cache"
+                  instance="Innosend\PickupPoints\Observer\ClearCarriersCache"/>
+    </event>
+</config>

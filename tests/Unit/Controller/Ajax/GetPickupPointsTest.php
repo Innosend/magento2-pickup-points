@@ -15,6 +15,7 @@ use Innosend\PickupPoints\Helper\Geocoder;
 use Innosend\PickupPoints\Model\PickupPoint;
 use Innosend\PickupPoints\Model\PickupPointRepository;
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\App\State;
 use Magento\Framework\App\Request\Http as HttpRequest;
 use Magento\Framework\Controller\Result\Json;
 use Magento\Framework\Controller\Result\JsonFactory;
@@ -52,6 +53,9 @@ class GetPickupPointsTest extends TestCase
     /** @var DayConverter&MockObject */
     private $dayConverter;
 
+    /** @var State&MockObject */
+    private $appState;
+
     /** @var Json&MockObject */
     private $jsonResult;
 
@@ -67,6 +71,8 @@ class GetPickupPointsTest extends TestCase
         $this->distanceCalculator = $this->createMock(DistanceCalculator::class);
         $this->scopeConfig        = $this->createMock(ScopeConfigInterface::class);
         $this->dayConverter       = $this->createMock(DayConverter::class);
+        $this->appState           = $this->createMock(State::class);
+        $this->appState->method('getMode')->willReturn(State::MODE_PRODUCTION);
 
         $this->jsonResult = $this->createMock(Json::class);
         $this->jsonResult->method('setData')->willReturnSelf();
@@ -81,7 +87,8 @@ class GetPickupPointsTest extends TestCase
             $this->geocoder,
             $this->distanceCalculator,
             $this->scopeConfig,
-            $this->dayConverter
+            $this->dayConverter,
+            $this->appState
         );
     }
 
@@ -130,11 +137,15 @@ class GetPickupPointsTest extends TestCase
         $this->request->method('getQueryValue')->willReturn([]);
 
         $this->repository->method('getPickupPoints')->willReturn([]);
-        $this->repository->method('getLastApiRequestUrl')->willReturn(null);
+        $this->repository->method('getLastApiRequestUrl')
+            ->willReturn('https://api.innosend.eu/v1/pickup-point/?postcode=1012AB');
 
+        // The API URL must not be exposed to shoppers outside developer mode
         $this->jsonResult->expects($this->once())
             ->method('setData')
-            ->with($this->callback(fn(array $d) => $d['success'] === false));
+            ->with($this->callback(
+                fn(array $d) => $d['success'] === false && !array_key_exists('api_url', $d)
+            ));
 
         $this->controller->execute();
     }
@@ -253,7 +264,11 @@ class GetPickupPointsTest extends TestCase
 
         $this->jsonResult->expects($this->once())
             ->method('setData')
-            ->with($this->callback(fn(array $d) => $d['success'] === true && count($d['data']) === 1));
+            ->with($this->callback(
+                fn(array $d) => $d['success'] === true
+                    && count($d['data']) === 1
+                    && !array_key_exists('api_url', $d)
+            ));
 
         $this->controller->execute();
     }

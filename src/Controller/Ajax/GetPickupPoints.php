@@ -14,6 +14,7 @@ use Innosend\PickupPoints\Helper\DistanceCalculator;
 use Innosend\PickupPoints\Helper\DayConverter;
 use Innosend\PickupPoints\Model\PickupPointRepository;
 use Magento\Framework\App\Action\HttpPostActionInterface;
+use Magento\Framework\App\State;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\Controller\Result\Json;
@@ -68,6 +69,11 @@ class GetPickupPoints implements HttpPostActionInterface
     private $dayConverter;
 
     /**
+     * @var State
+     */
+    private $appState;
+
+    /**
      * @param JsonFactory $resultJsonFactory
      * @param PickupPointRepository $pickupPointRepository
      * @param RequestInterface $request
@@ -76,6 +82,7 @@ class GetPickupPoints implements HttpPostActionInterface
      * @param DistanceCalculator $distanceCalculator
      * @param ScopeConfigInterface $scopeConfig
      * @param DayConverter $dayConverter
+     * @param State $appState
      */
     public function __construct(
         JsonFactory $resultJsonFactory,
@@ -85,7 +92,8 @@ class GetPickupPoints implements HttpPostActionInterface
         Geocoder $geocoder,
         DistanceCalculator $distanceCalculator,
         ScopeConfigInterface $scopeConfig,
-        DayConverter $dayConverter
+        DayConverter $dayConverter,
+        State $appState
     ) {
         $this->resultJsonFactory = $resultJsonFactory;
         $this->pickupPointRepository = $pickupPointRepository;
@@ -95,6 +103,7 @@ class GetPickupPoints implements HttpPostActionInterface
         $this->distanceCalculator = $distanceCalculator;
         $this->scopeConfig = $scopeConfig;
         $this->dayConverter = $dayConverter;
+        $this->appState = $appState;
     }
 
     /**
@@ -380,8 +389,10 @@ class GetPickupPoints implements HttpPostActionInterface
                 ];
             }
 
-            // Get API request URL for debugging (from repository)
-            $apiRequestUrl = $this->pickupPointRepository->getLastApiRequestUrl();
+            // Only expose the Innosend API request URL in developer mode; it must never reach shoppers in production
+            $apiRequestUrl = $this->isDeveloperMode()
+                ? $this->pickupPointRepository->getLastApiRequestUrl()
+                : null;
 
             if (empty($data)) {
                 // Expose geocoded coordinates so the frontend can open the map at the
@@ -391,9 +402,12 @@ class GetPickupPoints implements HttpPostActionInterface
                 $emptyResponse = [
                     'success' => false,
                     'message' => __('No pickup points found for this address.'),
-                    'api_url' => $apiRequestUrl,
                     'data' => []
                 ];
+
+                if ($apiRequestUrl) {
+                    $emptyResponse['api_url'] = $apiRequestUrl;
+                }
 
                 if ($searchLat !== null && $searchLng !== null) {
                     $emptyResponse['search_latitude'] = $searchLat;
@@ -406,9 +420,12 @@ class GetPickupPoints implements HttpPostActionInterface
             // Include search coordinates in response so frontend can store them for future distance calculations
             $responseData = [
                 'success' => true,
-                'data' => $data,
-                'api_url' => $apiRequestUrl
+                'data' => $data
             ];
+
+            if ($apiRequestUrl) {
+                $responseData['api_url'] = $apiRequestUrl;
+            }
 
             // Add search coordinates if available (for distance calculation)
             if ($searchLat !== null && $searchLng !== null) {
@@ -509,5 +526,19 @@ class GetPickupPoints implements HttpPostActionInterface
         }
 
         return $processedHours;
+    }
+
+    /**
+     * Check if Magento runs in developer mode
+     *
+     * @return bool
+     */
+    private function isDeveloperMode(): bool
+    {
+        try {
+            return $this->appState->getMode() === State::MODE_DEVELOPER;
+        } catch (\Exception $e) {
+            return false;
+        }
     }
 }
